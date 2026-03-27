@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Xenophobia | 155 Doors</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background: black;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            font-family: 'Impact', 'Arial Black', 'Helvetica Neue', sans-serif;
+            position: fixed;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            background: black;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        #preload-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: black;
+            z-index: 200;
+            transition: opacity 0.3s ease;
+        }
+
+        #menu {
+            position: relative;
+            text-align: center;
+            z-index: 10;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+            pointer-events: none;
+        }
+        #menu.visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .title {
+            font-size: clamp(3rem, 15vw, 7rem);
+            color: white;
+            text-shadow: 0 0 10px rgba(255,0,0,0.5);
+            letter-spacing: 4px;
+            margin-bottom: 40px;
+            font-weight: bold;
+        }
+        .start-btn {
+            display: inline-block;
+            background: white;
+            color: black;
+            font-size: clamp(2rem, 8vw, 3.5rem);
+            font-weight: bold;
+            padding: 20px 60px;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 0 20px rgba(255,255,255,0.3);
+            font-family: inherit;
+            border: none;
+        }
+        .start-btn:active {
+            transform: scale(0.96);
+        }
+
+        #game-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            visibility: hidden;
+            z-index: 5;
+        }
+        #game-layer.active {
+            visibility: visible;
+        }
+
+        .door-zone {
+            position: absolute;
+            top: 0;
+            width: 50%;
+            height: 100%;
+            cursor: pointer;
+            z-index: 30;
+            background: transparent;
+        }
+        .left-zone {
+            left: 0;
+        }
+        .right-zone {
+            right: 0;
+        }
+
+        .media-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: black;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            visibility: hidden;
+            object-fit: contain;
+        }
+        .media-overlay img, .media-overlay video {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+        .full-img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            background: black;
+        }
+
+        .door-counter {
+            position: fixed;
+            top: 20px;
+            right: 25px;
+            font-size: 3rem;
+            font-weight: bold;
+            color: white;
+            -webkit-text-stroke: 2px black;
+            text-shadow: 2px 2px 0 black;
+            z-index: 50;
+            font-family: monospace;
+            background: rgba(0,0,0,0.6);
+            padding: 8px 16px;
+            border-radius: 40px;
+            backdrop-filter: blur(4px);
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+        }
+        .door-counter.hidden-counter {
+            opacity: 0;
+        }
+        .hidden {
+            display: none;
+        }
+        .permanent-block {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: black;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            font-size: 1.6rem;
+            padding: 20px;
+            z-index: 1000;
+            font-family: monospace;
+            white-space: pre-line;
+            backdrop-filter: blur(12px);
+        }
+    </style>
+</head>
+<body>
+<div id="game-container">
+    <div id="preload-screen"></div>
+    <div id="menu">
+        <div class="title">Xenophobia</div>
+        <div class="start-btn" id="start-btn">Start</div>
+    </div>
+    <div id="game-layer">
+        <div class="door-zone left-zone" id="left-door"></div>
+        <div class="door-zone right-zone" id="right-door"></div>
+        <div class="door-counter" id="counter-display">0</div>
+    </div>
+    <div id="media-container" class="media-overlay"></div>
+</div>
+
+<script>
+    const ASSETS = {
+        mainDoorImg: "https://www.dropbox.com/scl/fi/0vhx4cna3p1v9jdq2pdk9/2_Doors_in_Kilkenny_IMG_4744.jpeg?rlkey=liophcs96iksyluduemo5ng6k&dl=1",
+        doorOpenSound: "https://www.dropbox.com/scl/fi/6voog97nn4c30k1evuw4p/2_5345855848126124823.ogg?rlkey=w20n960klmizqaefwf1w3t5u1&dl=1",
+        laughSound: "https://www.dropbox.com/scl/fi/o4uamfbt6yisu1aafvwg9/2_5345855848126124836.ogg?rlkey=3ahup5g0c8soksiavek3q9h0p&dl=1",
+        glitchVideo: "https://www.dropbox.com/scl/fi/kbgnwmf8pd41xuoyu1zaa/VID_20260327_193207_768.mp4?rlkey=jt54awufsa6v2e6p9v4ctsx2d&dl=1",
+        glitchSound: "https://www.dropbox.com/scl/fi/mkvt5hg1j2kkgknrzpgwi/2_5345855848126124833.ogg?rlkey=2s0gaijpcpf0zvh66ys907hw1&dl=1",
+        scaryFace: "https://www.dropbox.com/scl/fi/tsj859eztc6so14jddyys/Screenshot_20260327_193332_TikTok.jpg?rlkey=cgjgswyiuz6t6xqa5x5lg390r&dl=1",
+        screamerVideo: "https://www.dropbox.com/scl/fi/nvlu9dq4zoaqkx0nvhqre/videoplayback-2.mp4?rlkey=lxzsvwi8hdb0tyswwfdmfrstg&dl=1",
+        longScaryVideo: "https://www.dropbox.com/scl/fi/0m2057o8v2xc246i7nfio/VID_20260327_202653_255.mp4?rlkey=c3csckwedkt2x0jx80lrjxc45&dl=1",
+        finalImg: "https://www.dropbox.com/scl/fi/cx0wqdmc8m6bfoieja8lc/Level_663.webp?rlkey=a1rc1xdv0ggi66w0c7nh4p5iq&dl=1",
+        finalVideo: "https://www.dropbox.com/scl/fi/8lhj8mnjsd1k1t7f25fo6/VID_20260327_203934_267.mp4?rlkey=6gjqcyg4buvng4gqyqadf0qp4&dl=1"
+    };
+
+    let currentDoors = 0;
+    let gameActive = false;
+    let isTransitioning = false;
+    let permanentLock = false;
+    let mediaTimeout = null;
+    let mediaActive = false;
+
+    const preloadScreen = document.getElementById('preload-screen');
+    const menuDiv = document.getElementById('menu');
+    const gameLayer = document.getElementById('game-layer');
+    const leftZone = document.getElementById('left-door');
+    const rightZone = document.getElementById('right-door');
+    const counterDisplay = document.getElementById('counter-display');
+    const mediaContainer = document.getElementById('media-container');
+
+    function playSound(url) {
+        try {
+            const audio = new Audio(url);
+            audio.volume = 0.9;
+            audio.play().catch(e => console.warn("audio error", e));
+        } catch(e) {}
+    }
+
+    function clearMedia() {
+        if (mediaTimeout) clearTimeout(mediaTimeout);
+        mediaContainer.innerHTML = '';
+        mediaContainer.style.visibility = 'hidden';
+        mediaActive = false;
+    }
+
+    function showMediaElement(element, durationSec, onComplete) {
+        clearMedia();
+        mediaContainer.style.visibility = 'visible';
+        mediaContainer.innerHTML = '';
+        if (element.tagName === 'VIDEO') {
+            element.style.width = '100%';
+            element.style.height = '100%';
+            element.style.objectFit = 'contain';
+            mediaContainer.appendChild(element);
+            element.play().catch(e=>console.warn);
+            mediaTimeout = setTimeout(() => {
+                element.pause();
+                clearMedia();
+                if (onComplete) onComplete();
+            }, durationSec * 1000);
+        } else {
+            mediaContainer.appendChild(element);
+            mediaTimeout = setTimeout(() => {
+                clearMedia();
+                if (onComplete) onComplete();
+            }, durationSec * 1000);
+        }
+        mediaActive = true;
+    }
+
+    function showImage(url, durationSec, onComplete) {
+        const img = new Image();
+        img.src = url;
+        img.className = 'full-img';
+        img.style.width = '100%';
+        img.style.height = '100%';
+        img.style.objectFit = 'contain';
+        img.onload = () => showMediaElement(img, durationSec, onComplete);
+        if (img.complete) showMediaElement(img, durationSec, onComplete);
+        else img.onload = () => showMediaElement(img, durationSec, onComplete);
+    }
+
+    function showVideo(url, durationSec, onComplete, loop = false) {
+        const video = document.createElement('video');
+        video.src = url;
+        video.autoplay = true;
+        video.muted = false;
+        video.playsInline = true;
+        video.style.width = '100%';
+        video.style.height = '100%';
+        video.style.objectFit = 'contain';
+        
+        if (!loop) {
+            video.addEventListener('ended', () => {
+                if (mediaTimeout) clearTimeout(mediaTimeout);
+                clearMedia();
+                if (onComplete) onComplete();
+            });
+            mediaTimeout = setTimeout(() => {
+                if (!video.paused) video.pause();
+                clearMedia();
+                if (onComplete) onComplete();
+            }, durationSec * 1000);
+        } else {
+            mediaTimeout = setTimeout(() => {
+                video.pause();
+                clearMedia();
+                if (onComplete) onComplete();
+            }, durationSec * 1000);
+        }
+        mediaContainer.appendChild(video);
+        mediaContainer.style.visibility = 'visible';
+        mediaActive = true;
+        video.play().catch(e=>console.warn);
+    }
+
+    function hideCounter() {
+        counterDisplay.classList.add('hidden-counter');
+    }
+
+    function showCounter() {
+        counterDisplay.classList.remove('hidden-counter');
+    }
+
+    function returnToDoors() {
+        if (permanentLock) return;
+        if (currentDoors >= 155) return;
+        isTransitioning = false;
+        mediaActive = false;
+        clearMedia();
+        showCounter();
+        const gameBg = document.getElementById('game-layer');
+        gameBg.style.backgroundImage = `url('${ASSETS.mainDoorImg}')`;
+        gameBg.style.backgroundSize = 'contain';
+        gameBg.style.backgroundRepeat = 'no-repeat';
+        gameBg.style.backgroundPosition = 'center';
+        gameBg.style.backgroundColor = 'black';
+        counterDisplay.innerText = currentDoors;
+        gameActive = true;
+    }
+
+    function handleFinalEnding() {
+        gameActive = false;
+        isTransitioning = true;
+        document.getElementById('game-layer').style.backgroundImage = '';
+        clearMedia();
+        hideCounter();
+        
+        setTimeout(() => {
+            if (permanentLock) return;
+            const finalDiv = document.createElement('div');
+            finalDiv.style.position = 'relative';
+            finalDiv.style.width = '100%';
+            finalDiv.style.height = '100%';
+            finalDiv.style.display = 'flex';
+            finalDiv.style.alignItems = 'center';
+            finalDiv.style.justifyContent = 'center';
+            const bgImg = new Image();
+            bgImg.src = ASSETS.finalImg;
+            bgImg.style.width = '100%';
+            bgImg.style.height = '100%';
+            bgImg.style.objectFit = 'contain';
+            bgImg.style.position = 'absolute';
+            const emojiDiv = document.createElement('div');
+            emojiDiv.innerText = '🚪';
+            emojiDiv.style.fontSize = 'clamp(100px, 25vw, 300px)';
+            emojiDiv.style.cursor = 'pointer';
+            emojiDiv.style.zIndex = '150';
+            emojiDiv.style.position = 'relative';
+            emojiDiv.style.textShadow = '0 0 20px black';
+            finalDiv.appendChild(bgImg);
+            finalDiv.appendChild(emojiDiv);
+            mediaContainer.innerHTML = '';
+            mediaContainer.appendChild(finalDiv);
+            mediaContainer.style.visibility = 'visible';
+            mediaActive = true;
+            
+            const clickHandler = () => {
+                emojiDiv.removeEventListener('click', clickHandler);
+                clearMedia();
+                setTimeout(() => {
+                    showVideo(ASSETS.finalVideo, 44, () => {
+                        localStorage.setItem('xenophobia_completed', 'true');
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 500);
+                    }, false);
+                }, 3000);
+            };
+            emojiDiv.addEventListener('click', clickHandler);
+        }, 4000);
+    }
+
+    function openDoorAndEffect() {
+        if (permanentLock || !gameActive || isTransitioning) return false;
+        if (currentDoors >= 155) return false;
+        
+        gameActive = false;
+        isTransitioning = true;
+        document.getElementById('game-layer').style.backgroundImage = '';
+        hideCounter();
+        playSound(ASSETS.doorOpenSound);
+        
+        currentDoors++;
+        counterDisplay.innerText = currentDoors;
+        
+        if (currentDoors === 155) {
+            handleFinalEnding();
+            return true;
+        }
+        
+        setTimeout(() => {
+            if (permanentLock) return;
+            let doorReached = currentDoors;
+            
+            if (doorReached === 13) {
+                playSound(ASSETS.laughSound);
+                returnToDoors();
+            }
+            else if (doorReached === 20) {
+                playSound(ASSETS.glitchSound);
+                showVideo(ASSETS.glitchVideo, 4, () => {
+                    returnToDoors();
+                }, false);
+            }
+            else if (doorReached === 31) {
+                playSound(ASSETS.glitchSound);
+                showImage(ASSETS.scaryFace, 4, () => {
+                    returnToDoors();
+                });
+            }
+            else if (doorReached === 42) {
+                showVideo(ASSETS.screamerVideo, 3, () => {
+                    returnToDoors();
+                }, false);
+            }
+            else if (doorReached === 66) {
+                showVideo(ASSETS.longScaryVideo, 19, () => {
+                    returnToDoors();
+                }, false);
+            }
+            else if (doorReached === 88) {
+                showVideo(ASSETS.screamerVideo, 3, () => {
+                    returnToDoors();
+                }, false);
+            }
+            else if (doorReached === 100) {
+                showVideo(ASSETS.glitchVideo, 4, () => {
+                    returnToDoors();
+                }, false);
+            }
+            else if (doorReached === 130) {
+                showVideo(ASSETS.glitchVideo, 4, () => {
+                    returnToDoors();
+                }, false);
+            }
+            else {
+                returnToDoors();
+            }
+        }, 4000);
+        
+        return true;
+    }
+
+    function startGame() {
+        if (permanentLock) return;
+        menuDiv.classList.remove('visible');
+        gameLayer.classList.add('active');
+        gameActive = true;
+        isTransitioning = false;
+        currentDoors = 0;
+        counterDisplay.innerText = "0";
+        showCounter();
+        document.getElementById('game-layer').style.backgroundImage = `url('${ASSETS.mainDoorImg}')`;
+        document.getElementById('game-layer').style.backgroundSize = 'contain';
+        document.getElementById('game-layer').style.backgroundRepeat = 'no-repeat';
+        document.getElementById('game-layer').style.backgroundPosition = 'center';
+        document.getElementById('game-layer').style.backgroundColor = 'black';
+        leftZone.style.pointerEvents = 'auto';
+        rightZone.style.pointerEvents = 'auto';
+    }
+
+    function checkPermanentBlock() {
+        const completed = localStorage.getItem('xenophobia_completed');
+        if (completed === 'true') {
+            permanentLock = true;
+            gameActive = false;
+            menuDiv.classList.remove('visible');
+            gameLayer.classList.remove('active');
+            const blockDiv = document.createElement('div');
+            blockDiv.className = 'permanent-block';
+            blockDiv.innerText = "155 doors have been crossed, congratulations, you're officially dead. When you reached door 155, your body was dismembered and your insides were cut open. Now this site will never be accessible to you again.";
+            document.getElementById('game-container').appendChild(blockDiv);
+        }
+    }
+
+    function preloadAllAssets() {
+        const assetsList = Object.values(ASSETS);
+        let loaded = 0;
+        const total = assetsList.length;
+        
+        function resourceLoaded() {
+            loaded++;
+            if (loaded === total) {
+                setTimeout(() => {
+                    preloadScreen.style.opacity = '0';
+                    setTimeout(() => {
+                        preloadScreen.style.display = 'none';
+                        menuDiv.classList.add('visible');
+                    }, 300);
+                }, 5000);
+            }
+        }
+        
+        assetsList.forEach(url => {
+            if (url.match(/\.(jpg|jpeg|png|webp)$/i)) {
+                const img = new Image();
+                img.onload = resourceLoaded;
+                img.onerror = resourceLoaded;
+                img.src = url;
+            } else if (url.match(/\.(mp4|ogg|webm)$/i)) {
+                const media = document.createElement('video');
+                media.preload = 'auto';
+                media.oncanplaythrough = resourceLoaded;
+                media.onerror = resourceLoaded;
+                media.src = url;
+                media.load();
+            } else {
+                const audio = new Audio();
+                audio.preload = 'auto';
+                audio.oncanplaythrough = resourceLoaded;
+                audio.onerror = resourceLoaded;
+                audio.src = url;
+                audio.load();
+            }
+        });
+        
+        setTimeout(() => {
+            if (loaded !== total) {
+                preloadScreen.style.opacity = '0';
+                setTimeout(() => {
+                    preloadScreen.style.display = 'none';
+                    menuDiv.classList.add('visible');
+                }, 300);
+            }
+        }, 6000);
+    }
+
+    function bindEvents() {
+        leftZone.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (!gameActive || isTransitioning || permanentLock || currentDoors >= 155) return;
+            openDoorAndEffect();
+        });
+        rightZone.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (!gameActive || isTransitioning || permanentLock || currentDoors >= 155) return;
+            openDoorAndEffect();
+        });
+        document.getElementById('start-btn').addEventListener('click', () => {
+            if (permanentLock) return;
+            startGame();
+        });
+    }
+
+    function init() {
+        checkPermanentBlock();
+        if (!permanentLock) {
+            preloadScreen.style.display = 'block';
+            preloadScreen.style.background = 'black';
+            preloadAllAssets();
+        } else {
+            preloadScreen.style.display = 'none';
+        }
+        bindEvents();
+    }
+    
+    init();
+</script>
+</body>
+</html>
